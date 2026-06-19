@@ -24,6 +24,7 @@ SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", "change-me-please")
 MAX_UPLOAD_FILES = 200
 MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 CAPTCHA_VALID_SECONDS = 60 * 60
+JPG_BACKGROUND_COLOR = (0, 0, 0)
 if not TURNSTILE_SITE_KEY or not TURNSTILE_SECRET_KEY:
     raise RuntimeError(
         "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be set in the environment."
@@ -36,6 +37,21 @@ app.mount(
     StaticFiles(directory=os.path.join(BASE_DIR, "static")),
     name="static",
 )
+
+
+def convert_to_jpg_ready_image(image_obj: Image.Image) -> Image.Image:
+    has_alpha = image_obj.mode in ("RGBA", "LA") or (
+        image_obj.mode == "P" and "transparency" in image_obj.info
+    )
+    if not has_alpha:
+        return image_obj.convert("RGB")
+
+    rgba_image = image_obj.convert("RGBA")
+    background_image = Image.new(
+        "RGBA", rgba_image.size, JPG_BACKGROUND_COLOR + (255,)
+    )
+    background_image.alpha_composite(rgba_image)
+    return background_image.convert("RGB")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -95,7 +111,7 @@ async def process_images(
 
         try:
             with Image.open(io.BytesIO(file_bytes)) as image_obj:
-                image_obj = image_obj.convert("RGB")
+                image_obj = convert_to_jpg_ready_image(image_obj)
                 output_buffer = io.BytesIO()
                 image_obj.save(output_buffer, format="JPEG", quality=quality)
         except Exception as exc:
