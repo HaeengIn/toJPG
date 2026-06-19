@@ -11,7 +11,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h2>JPG 이미지 변환기</h2>
+            <h1>toJPG</h1>
             <button id="themeToggleBtn">테마 변경</button>
         </div>
         <div class="controls">
@@ -20,7 +20,9 @@
             <label for="qualitySelect">품질:</label>
             <select id="qualitySelect"></select>
         </div>
+        <p class="upload-hint">최대 200개 파일, 파일당 최대 10MB까지 업로드 가능합니다.</p>
         <ul id="fileListContainer"></ul>
+        <p id="fileSummary" class="file-summary"></p>
         <div class="turnstile-container">
             <div class="cf-turnstile" data-sitekey="{{ sitekey }}"></div>
         </div>
@@ -28,7 +30,10 @@
         <div id="conversionResultArea" class="result-area" style="display: none;">
             <div class="header">
                 <h3>변환 완료</h3>
-                <button id="downloadZipBtn">ZIP으로 모두 다운로드</button>
+                <div>
+                    <button id="downloadZipBtn">ZIP으로 모두 다운로드</button>
+                    <button id="clearResultsBtn" class="btn-danger">결과 모두 삭제</button>
+                </div>
             </div>
             <ul id="convertedListContainer"></ul>
         </div>
