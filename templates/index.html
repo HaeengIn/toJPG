@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JPG 변환기</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <link rel="stylesheet" href="/static/style.css?v={{ static_version('static/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>JPG 이미지 변환기</h2>
+            <button id="themeToggleBtn">테마 변경</button>
+        </div>
+        <div class="controls">
+            <input type="file" id="imageInput" multiple accept="image/*">
+            <button id="clearAllBtn" class="btn-danger">모두 삭제</button>
+            <label for="qualitySelect">품질:</label>
+            <select id="qualitySelect"></select>
+        </div>
+        <ul id="fileListContainer"></ul>
+        <div class="turnstile-container">
+            <div class="cf-turnstile" data-sitekey="{{ sitekey }}"></div>
+        </div>
+        <button id="convertSubmitBtn" style="width: 100%;">변환 시작</button>
+        <div id="conversionResultArea" class="result-area" style="display: none;">
+            <div class="header">
+                <h3>변환 완료</h3>
+                <button id="downloadZipBtn">ZIP으로 모두 다운로드</button>
+            </div>
+            <ul id="convertedListContainer"></ul>
+        </div>
+    </div>
+    <script defer src="/static/script.js?v={{ static_version('static/script.js') }}"></script>
+</body>
+</html>
