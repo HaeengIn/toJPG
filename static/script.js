@@ -9,6 +9,12 @@ const resultAreaElement = document.getElementById("conversionResultArea");
 const convertedListElement = document.getElementById("convertedListContainer");
 const downloadZipBtnElement = document.getElementById("downloadZipBtn");
 const clearResultsBtnElement = document.getElementById("clearResultsBtn");
+const progressAreaElement = document.getElementById("progressArea");
+const totalProgressFillElement = document.getElementById("totalProgressFill");
+const totalProgressTextElement = document.getElementById("totalProgressText");
+const currentProgressLabelElement = document.getElementById("currentProgressLabel");
+const currentProgressFillElement = document.getElementById("currentProgressFill");
+const currentProgressTextElement = document.getElementById("currentProgressText");
 
 const MAX_UPLOAD_FILES = 200;
 const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -18,9 +24,76 @@ const fileSummaryElement = document.getElementById("fileSummary");
 let pendingFilesArray = [];
 let finishedImagesArray = [];
 
-const setSubmitState = (isSubmitting) => {
-  convertBtnElement.textContent = isSubmitting ? "변환 중..." : "변환 시작";
+const setSubmitState = (isSubmitting, currentFileName = "") => {
+  convertBtnElement.textContent = isSubmitting
+    ? `변환 중...${currentFileName ? ` : ${currentFileName}` : ""}`
+    : "변환 시작";
   convertBtnElement.disabled = isSubmitting;
+};
+
+const setProgressBarValue = (fillElement, textElement, value) => {
+  const safeValue = Math.min(Math.max(Number(value) || 0, 0), 100);
+  fillElement.style.width = `${safeValue}%`;
+  textElement.textContent = `${safeValue.toFixed(1)}%`;
+};
+
+const resetProgressView = () => {
+  setSubmitState(false);
+  progressAreaElement.style.display = "none";
+  currentProgressLabelElement.textContent = "현재 이미지 진행도";
+  setProgressBarValue(totalProgressFillElement, totalProgressTextElement, 0);
+  setProgressBarValue(currentProgressFillElement, currentProgressTextElement, 0);
+};
+
+const showProgressView = () => {
+  progressAreaElement.style.display = "block";
+  setProgressBarValue(totalProgressFillElement, totalProgressTextElement, 0);
+  setProgressBarValue(currentProgressFillElement, currentProgressTextElement, 0);
+};
+
+const updateProgressView = ({ currentFile, currentProgress, totalProgress }) => {
+  setSubmitState(true, currentFile);
+  currentProgressLabelElement.textContent = currentFile
+    ? `${currentFile} 진행도`
+    : "현재 이미지 진행도";
+  setProgressBarValue(totalProgressFillElement, totalProgressTextElement, totalProgress);
+  setProgressBarValue(
+    currentProgressFillElement,
+    currentProgressTextElement,
+    currentProgress,
+  );
+};
+
+const readConversionStream = async (response) => {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let bufferedText = "";
+  let convertedImages = [];
+
+  while (true) {
+    const { value, done } = await reader.read();
+    bufferedText += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = bufferedText.split("\n");
+    bufferedText = lines.pop() || "";
+
+    for (const lineText of lines) {
+      if (!lineText.trim()) continue;
+      const eventData = JSON.parse(lineText);
+      if (eventData.event === "progress") {
+        updateProgressView(eventData);
+      }
+      if (eventData.event === "error") {
+        throw new Error(eventData.message);
+      }
+      if (eventData.event === "complete") {
+        convertedImages = eventData.images || [];
+      }
+    }
+
+    if (done) break;
+  }
+
+  return convertedImages;
 };
 
 const buildQualityOptions = () => {
@@ -115,6 +188,7 @@ const clearConvertedResults = () => {
   finishedImagesArray = [];
   convertedListElement.innerHTML = "";
   resultAreaElement.style.display = "none";
+  resetProgressView();
 };
 
 const removeConvertedImage = (index) => {
@@ -186,6 +260,7 @@ convertBtnElement.addEventListener("click", async () => {
   }
 
   setSubmitState(true);
+  showProgressView();
 
   const formDataObject = new FormData();
   pendingFilesArray.forEach((fileObj) =>
@@ -207,8 +282,7 @@ convertBtnElement.addEventListener("click", async () => {
       );
     }
 
-    const responseJson = await serverResponse.json();
-    finishedImagesArray = responseJson.images || [];
+    finishedImagesArray = await readConversionStream(serverResponse);
     displayConvertedResults();
   } catch (error) {
     showAlert(error.message || "서버 통신 중 오류가 발생했습니다.");

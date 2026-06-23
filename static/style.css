@@ -141,3 +141,43 @@ li {
   border-top: 2px solid var(--border-color);
   padding-top: 20px;
 }
+
+.progress-area {
+  margin-top: 16px;
+}
+
+.progress-label {
+  font-weight: bold;
+  margin: 12px 0 6px;
+  word-break: break-all;
+}
+
+.progress-bar {
+  position: relative;
+  height: 24px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background-color: var(--list-bg);
+}
+
+.progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--btn-bg);
+  box-shadow: 0 0 12px var(--btn-glow);
+  transition: width 0.35s ease;
+}
+
+.progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--btn-text);
+  font-size: 13px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+}
