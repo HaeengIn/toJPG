@@ -1,5 +1,6 @@
 import base64
 import io
+import json
 import os
 import time
 from typing import List
@@ -7,7 +8,7 @@ from typing import List
 import httpx
 import pillow_avif
 from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from PIL import Image
@@ -39,11 +40,20 @@ app.mount(
 )
 
 
-def convert_to_jpg_ready_image(image_obj: Image.Image) -> Image.Image:
+def image_has_transparent_area(image_obj: Image.Image) -> bool:
     has_alpha = image_obj.mode in ("RGBA", "LA") or (
         image_obj.mode == "P" and "transparency" in image_obj.info
     )
     if not has_alpha:
+        return False
+
+    alpha_channel = image_obj.convert("RGBA").getchannel("A")
+    min_alpha, _ = alpha_channel.getextrema()
+    return min_alpha < 255
+
+
+def convert_to_jpg_ready_image(image_obj: Image.Image) -> Image.Image:
+    if not image_has_transparent_area(image_obj):
         return image_obj.convert("RGB")
 
     rgba_image = image_obj.convert("RGBA")
@@ -52,6 +62,10 @@ def convert_to_jpg_ready_image(image_obj: Image.Image) -> Image.Image:
     )
     background_image.alpha_composite(rgba_image)
     return background_image.convert("RGB")
+
+
+def build_progress_event(event_name: str, data: dict) -> str:
+    return json.dumps({"event": event_name, **data}, ensure_ascii=False) + "\n"
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -100,35 +114,70 @@ async def process_images(
 
         session["captcha_verified_at"] = int(time.time())
 
-    converted_data = []
-    for upload_file in files:
-        file_bytes = await upload_file.read()
-        if len(file_bytes) > MAX_UPLOAD_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"파일 {upload_file.filename}의 크기가 너무 큽니다. 최대 업로드 크기는 {MAX_UPLOAD_FILE_SIZE // (1024*1024)}MB입니다.",
+    async def convert_stream():
+        converted_data = []
+        total_files = len(files)
+
+        for file_index, upload_file in enumerate(files):
+            original_filename = upload_file.filename or "image"
+            yield build_progress_event(
+                "progress",
+                {
+                    "currentFile": original_filename,
+                    "currentProgress": 0,
+                    "totalProgress": (file_index / total_files) * 100,
+                },
             )
 
-        try:
-            with Image.open(io.BytesIO(file_bytes)) as image_obj:
-                image_obj = convert_to_jpg_ready_image(image_obj)
-                output_buffer = io.BytesIO()
-                image_obj.save(output_buffer, format="JPEG", quality=quality)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to process file {upload_file.filename}: {exc}",
+            file_bytes = await upload_file.read()
+            if len(file_bytes) > MAX_UPLOAD_FILE_SIZE:
+                yield build_progress_event(
+                    "error",
+                    {
+                        "message": f"파일 {original_filename}의 크기가 너무 큽니다. 최대 업로드 크기는 {MAX_UPLOAD_FILE_SIZE // (1024*1024)}MB입니다."
+                    },
+                )
+                return
+
+            try:
+                with Image.open(io.BytesIO(file_bytes)) as image_obj:
+                    image_obj = convert_to_jpg_ready_image(image_obj)
+                    yield build_progress_event(
+                        "progress",
+                        {
+                            "currentFile": original_filename,
+                            "currentProgress": 50,
+                            "totalProgress": ((file_index + 0.5) / total_files) * 100,
+                        },
+                    )
+                    output_buffer = io.BytesIO()
+                    image_obj.save(output_buffer, format="JPEG", quality=quality)
+            except Exception as exc:
+                yield build_progress_event(
+                    "error",
+                    {"message": f"Failed to process file {original_filename}: {exc}"},
+                )
+                return
+
+            output_buffer.seek(0)
+            base64_encoded = base64.b64encode(output_buffer.read()).decode("utf-8")
+            filename_base = (
+                original_filename.rsplit(".", 1)[0]
+                if "." in original_filename
+                else original_filename
+            )
+            converted_data.append(
+                {"filename": f"{filename_base}.jpg", "data": base64_encoded}
+            )
+            yield build_progress_event(
+                "progress",
+                {
+                    "currentFile": original_filename,
+                    "currentProgress": 100,
+                    "totalProgress": ((file_index + 1) / total_files) * 100,
+                },
             )
 
-        output_buffer.seek(0)
-        base64_encoded = base64.b64encode(output_buffer.read()).decode("utf-8")
-        filename_base = (
-            upload_file.filename.rsplit(".", 1)[0]  # type: ignore
-            if "." in upload_file.filename  # type: ignore
-            else upload_file.filename
-        )
-        converted_data.append(
-            {"filename": f"{filename_base}.jpg", "data": base64_encoded}
-        )
+        yield build_progress_event("complete", {"images": converted_data})
 
-    return {"images": converted_data}
+    return StreamingResponse(convert_stream(), media_type="application/x-ndjson")

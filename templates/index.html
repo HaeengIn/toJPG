@@ -27,6 +27,18 @@
             <div class="cf-turnstile" data-sitekey="{{ sitekey }}"></div>
         </div>
         <button id="convertSubmitBtn" style="width: 100%;">변환 시작</button>
+        <div id="progressArea" class="progress-area" style="display: none;">
+            <div class="progress-label">전체 진행도</div>
+            <div class="progress-bar">
+                <div id="totalProgressFill" class="progress-fill"></div>
+                <span id="totalProgressText" class="progress-text">0.0%</span>
+            </div>
+            <div id="currentProgressLabel" class="progress-label">현재 이미지 진행도</div>
+            <div class="progress-bar">
+                <div id="currentProgressFill" class="progress-fill"></div>
+                <span id="currentProgressText" class="progress-text">0.0%</span>
+            </div>
+        </div>
         <div id="conversionResultArea" class="result-area" style="display: none;">
             <div class="header">
                 <h3>변환 완료</h3>
